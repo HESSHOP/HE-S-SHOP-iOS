@@ -1,0 +1,11 @@
+{
+  "appId": "com.hesstore.app",
+  "appName": "HES STORE",
+  "webDir": "www",
+  "server": {
+    "url": "https://he-s-shop-v2.skyhost.tech/",
+    "allowNavigation": ["he-s-shop-v2.skyhost.tech"],
+    "errorPath": "offline.html"
+  },
+  "backgroundColor": "#000000"
+}

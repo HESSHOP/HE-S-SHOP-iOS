@@ -1,0 +1,74 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer les dépendances
+        run: npm install
+
+      - name: Créer le projet iOS
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Fenêtres du lecteur, téléchargements et abonnement à la chaîne
+        run: |
+          set -e
+          cat ios-src/HesExtras.swift >> ios/App/App/AppDelegate.swift
+
+          SB=ios/App/App/Base.lproj/Main.storyboard
+          sed -i '' -e 's/customClass="CAPBridgeViewController"/customClass="HesViewController"/' -e 's/customModule="Capacitor"/customModule="App"/' "$SB"
+          grep -q 'HesViewController' "$SB"
+
+          PL=ios/App/App/Info.plist
+          pb() { /usr/libexec/PlistBuddy -c "Add :$1 $2 $3" "$PL" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :$1 $3" "$PL"; }
+          pb UIUserInterfaceStyle string Dark
+          pb ITSAppUsesNonExemptEncryption bool false
+          pb NSPhotoLibraryAddUsageDescription string "Enregistrer les fichiers téléchargés"
+
+      - name: Compiler l'app (non signée)
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+      - name: Créer l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry HESSTORE.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HESSTORE-ipa
+          path: HESSTORE.ipa
+
+      - name: Publier dans Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-ios --yes --cleanup-tag || true
+          gh release create latest-ios HESSTORE.ipa --title "HES STORE IPA" --notes "Dernière version de l'IPA (non signée, à installer avec AltStore / Sideloadly)"
